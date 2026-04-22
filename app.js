@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const gallery = document.getElementById('product-gallery');
   const heroImgContainer = document.getElementById('hero-img-container');
   const featureImgContainer = document.getElementById('feature-img-container');
-  
+
   // Modal Elements
   const modal = document.getElementById('product-modal');
   const closeModalBtn = document.getElementById('close-modal');
@@ -26,17 +26,76 @@ document.addEventListener('DOMContentLoaded', () => {
   const cartTotal = document.getElementById('cart-total');
   const checkoutBtn = document.getElementById('checkout-btn');
 
-  // Load Products from window.PRODUCTS
-  if (window.PRODUCTS && window.PRODUCTS.length > 0) {
-    renderShowcase(window.PRODUCTS);
+  // PASTE YOUR GOOGLE SHEET CSV LINK HERE
+  const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQuQL-2EKGXcSBQDEG5b6qca-rzH7EfF7Z_r3xieFysP6LJFPyXf6mlwEQiPYVNEEfNGn_NRg8YcQAF/pub?gid=0&single=true&output=csv";
+
+  if (GOOGLE_SHEET_CSV_URL) {
+    fetchProductsFromSheet(GOOGLE_SHEET_CSV_URL);
   } else {
     gallery.innerHTML = `
       <div style="grid-column: span 2; padding: 32px; text-align: center;">
-        <h2 class="font-display-lg" style="color: var(--ash-muted);">PRODUCTS NOT FOUND</h2>
-        <p style="margin-top: 16px;">Please generate products.js using the admin tool.</p>
-        <a href="admin.html" style="display: inline-block; margin-top: 16px; padding: 12px 24px; background: var(--primary); color: var(--ink-text); text-decoration: none; font-weight: bold;">Go to Admin Tool</a>
+        <h2 class="font-display-lg" style="color: var(--ash-muted);">DATABASE NOT CONFIGURED</h2>
+        <p style="margin-top: 16px;">Please paste your Google Sheet CSV link into app.js</p>
       </div>
     `;
+  }
+
+  async function fetchProductsFromSheet(url) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Network response was not ok");
+      const csvText = await response.text();
+
+      const lines = csvText.split('\n');
+      const products = [];
+
+      // Skip header row (index 0)
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Simple CSV parse handling potential commas in quotes
+        const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+
+        if (parts.length >= 4) {
+          const name = parts[0].replace(/^"|"$/g, '').trim();
+          const category = parts[1].replace(/^"|"$/g, '').trim();
+          const price = parseInt(parts[2].replace(/^"|"$/g, '').replace(/[^0-9]/g, '')) || 0;
+          let link = parts[3].replace(/^"|"$/g, '').trim();
+
+          // Convert regular Google Drive links to direct image links
+          let id = null;
+          const match1 = link.match(/\/d\/([a-zA-Z0-9_-]+)/);
+          const match2 = link.match(/id=([a-zA-Z0-9_-]+)/);
+          if (match1) id = match1[1];
+          else if (match2) id = match2[1];
+
+          const imageUrl = id ? "https://lh3.googleusercontent.com/d/" + id : link;
+
+          products.push({
+            id: id || `prod_${i}`,
+            name: name || "UNTITLED",
+            category: category || "NEW ARRIVAL",
+            price: price || 150,
+            url: imageUrl
+          });
+        }
+      }
+
+      if (products.length > 0) {
+        renderShowcase(products);
+      } else {
+        throw new Error("No products found in sheet");
+      }
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      gallery.innerHTML = `
+        <div style="grid-column: span 2; padding: 32px; text-align: center;">
+          <h2 class="font-display-lg" style="color: var(--ash-muted);">ERROR LOADING PRODUCTS</h2>
+          <p style="margin-top: 16px;">Make sure your Google Sheet is published to web as CSV.</p>
+        </div>
+      `;
+    }
   }
 
   // Load Archive Images
@@ -58,11 +117,11 @@ document.addEventListener('DOMContentLoaded', () => {
     products.forEach((product, index) => {
       const card = document.createElement('div');
       card.className = 'product-card';
-      
+
       const priceVal = product.price || Math.floor(Math.random() * 300 + 150);
       product.price = priceVal; // Ensure product has a price
       const priceStr = `$${priceVal}`;
-      
+
       card.innerHTML = `
         <div class="product-img-wrapper">
           <img src="${product.url}" alt="${product.name}" loading="lazy">
@@ -97,14 +156,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cart Logic
   addToBagBtn.addEventListener('click', () => {
     if (!currentProduct) return;
-    
+
     const existingItem = cart.find(item => item.id === currentProduct.id);
     if (existingItem) {
       existingItem.quantity += 1;
     } else {
       cart.push({ ...currentProduct, quantity: 1 });
     }
-    
+
     renderCart();
     modal.classList.remove('open'); // Close product modal
     openCart(); // Open cart to show it was added
@@ -132,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cart.forEach((item, index) => {
       total += item.price * item.quantity;
-      
+
       const itemEl = document.createElement('div');
       itemEl.className = 'cart-item';
       itemEl.innerHTML = `
@@ -207,9 +266,15 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const encodedMessage = encodeURIComponent(message);
-      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-      
-      window.open(whatsappUrl, '_blank');
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodedMessage}`;
+
+      const link = document.createElement('a');
+      link.href = whatsappUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     });
   }
 });
